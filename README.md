@@ -1,16 +1,15 @@
-# minum_obat
+# Minum Obat
 
 Aplikasi pengingat minum obat kesayangan kita semua
 
-## Getting Started
+## Round Down Application
 
-This project is a starting point for a Flutter application.
+- [x] Design Database 
+- [] Make design in Figma
+- [] It's Coding Time + Es Teh Manis
+- [] Upload to Playstore & Appstore
 
-A few resources to get you started if this is your first Flutter project:
 
-- [Lab: Write your first Flutter app](https://flutter.dev/docs/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://flutter.dev/docs/cookbook)
+### Design Database
 
-For help getting started with Flutter, view our
-[online documentation](https://flutter.dev/docs), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+<img src="assets/readme/design_database/design_database.png" width=1000 height=500>
