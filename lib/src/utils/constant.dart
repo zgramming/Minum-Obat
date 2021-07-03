@@ -1,11 +1,37 @@
+import 'package:flutter/material.dart';
+import 'package:global_template/global_template.dart';
+import 'package:table_calendar/table_calendar.dart';
+
+// ignore: avoid_classes_with_only_static_members
 class Constant {
-  static const applicationName = 'Minum Obat';
-  static const dsnSentry =
+  ///* Application Detail
+  String get applicationName => 'Minum Obat';
+  String get dsnSentry =>
       'https://28e8da2b28664f58a3833f0f7b5eb217@o821166.ingest.sentry.io/5842506';
 
   ///* Asset Images Path
-  static const onboardingImageReminder = 'reminder_white.png';
-  static const onboardingImageCalendar = 'event_white.png';
-  static const onboardingImageStatistic = 'statistic_white.png';
-  static const logoWhite = 'logo_white.png';
+  String get pathOnboardingImageReminder => '${appConfig.urlImageAsset}/reminder_white.png';
+  String get pathOnboardingImageCalendar => '${appConfig.urlImageAsset}/event_white.png';
+  String get pathOnboardingImageStatistic => '${appConfig.urlImageAsset}/statistic_white.png';
+  String get pathLogoWhite => '${appConfig.urlImageAsset}/logo_white.png';
+  String get pathMedsImage => '${appConfig.urlImageAsset}/meds_primary.png';
+  String get pathPillImage => '${appConfig.urlImageAsset}/pill_primary.png';
+  String get pathSyrupImage => '${appConfig.urlImageAsset}/syrup_primary.png';
+  String get pathFreepikImage => '${appConfig.urlImageAsset}/freepik.png';
+  String get pathFlaticonImage => '${appConfig.urlImageAsset}/flaticon.png';
+
+  ///* Locale
+  String get localeIndonesiaString => 'ID_id';
+
+  ///* Text
+  ///
+  Map<CalendarFormat, String> get kAvaliableCalendarFormat => const {
+        CalendarFormat.month: 'Bulan',
+        CalendarFormat.twoWeeks: '2 Minggu',
+        CalendarFormat.week: 'Minggu',
+      };
+
+  Locale get localeIndonesia => const Locale('id', 'ID');
 }
+
+final constant = Constant();
