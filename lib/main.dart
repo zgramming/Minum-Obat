@@ -1,3 +1,6 @@
+import 'dart:developer';
+
+import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -9,8 +12,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:table_calendar/table_calendar.dart';
 
-import 'package:minum_obat/src/provider/global/global_provider.dart';
-
+import './src/provider/global/global_provider.dart';
 import './src/utils/my_utils.dart';
 
 Future<void> main() async {
@@ -59,7 +61,7 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: colorPallete.scaffoldBackgroundColor,
         textTheme: GoogleFonts.comfortaaTextTheme(Theme.of(context).textTheme),
       ),
-      home: const WelcomeScreen(),
+      home: const SplashScreen(),
       onGenerateRoute: (settings) {
         final route = RouteAnimation();
         switch (settings.name) {
@@ -83,6 +85,9 @@ class MyApp extends StatelessWidget {
             return route.slideTransition(
                 slidePosition: SlidePosition.fromLeft,
                 screen: (ctx, animation, secondaryAnimation) => const FormChangePassword());
+          case FormMedicine.routeNamed:
+            return route.fadeTransition(
+                screen: (ctx, animation, secondaryAnimation) => const FormMedicine());
           default:
         }
       },
@@ -852,9 +857,17 @@ class _MyScheduleMedicineScreenState extends State<MyScheduleMedicineScreen>
                 color: Colors.white,
               ),
             ),
+            centerTitle: true,
             floating: true,
             snap: true,
             forceElevated: innerBoxIsScrolled,
+            actions: [
+              IconButton(
+                  onPressed: () {
+                    Navigator.of(context).pushNamed(FormMedicine.routeNamed);
+                  },
+                  icon: const Icon(FeatherIcons.plus, color: Colors.white)),
+            ],
             bottom: TabBar(
               controller: _tabController,
               indicator: BoxDecoration(
@@ -895,7 +908,7 @@ class _MyScheduleMedicineScreenState extends State<MyScheduleMedicineScreen>
                                         color: Colors.white,
                                         borderRadius: BorderRadius.circular(20.0)),
                                     child: Padding(
-                                      padding: EdgeInsets.all(24.0),
+                                      padding: const EdgeInsets.all(24.0),
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.stretch,
                                         children: [
@@ -1003,7 +1016,7 @@ class _MyScheduleMedicineScreenState extends State<MyScheduleMedicineScreen>
                                 right: 20,
                                 child: IconButton(
                                   onPressed: () {},
-                                  icon: Icon(FeatherIcons.chevronDown),
+                                  icon: const Icon(FeatherIcons.chevronDown),
                                 ),
                               )
                             ],
@@ -1466,6 +1479,329 @@ class _FormChangePasswordState extends State<FormChangePassword> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class FormMedicine extends StatefulWidget {
+  static const routeNamed = '/form-medicine';
+  const FormMedicine({Key? key}) : super(key: key);
+
+  @override
+  _FormMedicineState createState() => _FormMedicineState();
+}
+
+class _FormMedicineState extends State<FormMedicine> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+          icon: const Icon(
+            FeatherIcons.arrowLeft,
+            color: Colors.white,
+          ),
+        ),
+        centerTitle: true,
+        title: Text(
+          'Form Obat',
+          style: GoogleFonts.montserratAlternates(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        actions: [
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(
+              FeatherIcons.save,
+              color: Colors.white,
+            ),
+          )
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Dismissible(
+                key: UniqueKey(),
+                child: Container(
+                  padding: const EdgeInsets.all(12.0),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10.0),
+                    color: colorPallete.info,
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black54, blurRadius: 1),
+                    ],
+                  ),
+                  child: const Text(
+                    'Untuk menambah jam minum obat, silahkan simpan data terlebih dahulu',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10.0,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20.0),
+              Text(
+                'Informasi Obat',
+                style: GoogleFonts.montserratAlternates(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16.0,
+                ),
+              ),
+              const SizedBox(height: 20.0),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const TextFormFieldCustom(
+                        disableOutlineBorder: false,
+                        hintText: 'Obat Sakit Perut, Obat Penurun Panas',
+                        labelText: 'Nama Obat',
+                      ),
+                      const SizedBox(height: 20.0),
+                      DropddownCustom<String>(
+                        hintText: 'Pilih Kategori Obat',
+                        items: const ['Pill', 'Kapsul', 'Sir up'],
+                        onChanged: (value) => log('value $value'),
+                        valueItem: (value) => value,
+                        builder: (value) => Text(value.toString()),
+                      ),
+                      const SizedBox(height: 20.0),
+                      const TextFormFieldCustom(
+                        disableOutlineBorder: false,
+                        hintText: 'Keterangan obat',
+                        labelText: 'Keterangan',
+                        minLines: 3,
+                        maxLines: 5,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                      ),
+                      const SizedBox(height: 20.0),
+                      DropddownCustom<TypeScheduleModel>(
+                        hintText: 'Pilih Tipe Jadwal',
+                        items: const [
+                          TypeScheduleModel(),
+                          TypeScheduleModel(
+                            value: 'weekly',
+                            typeScheduleItem: TypeScheduleItem.weekly,
+                          ),
+                        ],
+                        onChanged: (value) => context.read(currentTypeSchedule).state = value,
+                        valueItem: (value) => value,
+                        builder: (value) => Text(value?.value ?? ''),
+                      ),
+                      const SizedBox(height: 20.0),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20.0),
+              Text(
+                'Penentuan Jadwal',
+                style: GoogleFonts.montserratAlternates(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16.0,
+                ),
+              ),
+              const SizedBox(height: 20.0),
+
+              // const SizedBox(height: 20.0),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 20.0),
+                      Ink(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: colorPallete.accentColor!),
+                          borderRadius: BorderRadius.circular(10.0),
+                        ),
+                        child: ListView.builder(
+                          itemCount: weekList.length,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemBuilder: (context, index) {
+                            final week = weekList[index];
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                unselectedWidgetColor: colorPallete.accentColor,
+                              ),
+                              child: CheckboxListTile(
+                                controlAffinity: ListTileControlAffinity.leading,
+                                value: true,
+                                title: Text(week.title),
+                                onChanged: (value) => '',
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      if (timeScheduleMedicineList.isEmpty) ...[
+                        const SizedBox(height: 20.0),
+                        const Center(child: Text('Daftar minum obat belum ada nih')),
+                      ] else ...[
+                        const SizedBox(height: 20.0),
+                        ListView.separated(
+                          separatorBuilder: (context, index) =>
+                              Divider(color: colorPallete.accentColor?.withOpacity(.5)),
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: timeScheduleMedicineList.length,
+                          shrinkWrap: true,
+                          itemBuilder: (context, index) {
+                            final schedule = timeScheduleMedicineList[index];
+                            return ListTile(
+                              leading: Ink(
+                                height: 30,
+                                width: 30,
+                                padding: const EdgeInsets.all(8.0),
+                                decoration: BoxDecoration(
+                                  color: colorPallete.primaryColor,
+                                  borderRadius: BorderRadius.circular(10.0),
+                                ),
+                                child: Text(
+                                  '${index + 1}',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                              title: Text(
+                                '${schedule.hour}:${schedule.minute}',
+                                style: GoogleFonts.montserratAlternates(),
+                              ),
+                              trailing: Wrap(
+                                children: [
+                                  IconButton(
+                                      onPressed: () {},
+                                      icon: Icon(FeatherIcons.trash, color: colorPallete.error)),
+                                  IconButton(
+                                      onPressed: () {},
+                                      icon: Icon(
+                                        FeatherIcons.edit,
+                                        color: colorPallete.info,
+                                      ))
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                      const SizedBox(height: 20.0),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            final result = await showTimePicker(
+                              context: context,
+                              initialTime: TimeOfDay.now(),
+                            );
+                            if (result != null) {
+                              log('result timepicker $result');
+                              setState(() {
+                                timeScheduleMedicineList.add(result);
+                              });
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            primary: colorPallete.success,
+                            padding: const EdgeInsets.all(12.0),
+                          ),
+                          child: const Text(
+                            'Tambah jam minum obat',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20.0),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20.0),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class WeekModel extends Equatable {
+  const WeekModel({
+    this.codeValue = 1,
+    this.value = 'senin',
+    this.title = 'Senin',
+  });
+
+  final int codeValue;
+  final String value;
+  final String title;
+
+  @override
+  List<Object> get props => [codeValue, value, title];
+
+  @override
+  bool get stringify => true;
+
+  WeekModel copyWith({
+    int? codeValue,
+    String? value,
+    String? title,
+  }) {
+    return WeekModel(
+      codeValue: codeValue ?? this.codeValue,
+      value: value ?? this.value,
+      title: title ?? this.title,
+    );
+  }
+}
+
+const weekList = [
+  WeekModel(),
+  WeekModel(codeValue: 2, value: 'selasa', title: 'Selasa'),
+  WeekModel(codeValue: 3, value: 'rabu', title: 'Rabu'),
+  WeekModel(codeValue: 4, value: 'kamis', title: 'Kamis'),
+  WeekModel(codeValue: 5, value: "jumat", title: "Juma't"),
+  WeekModel(codeValue: 6, value: 'sabtu', title: 'Sabtu'),
+  WeekModel(codeValue: 7, value: 'minggu', title: 'Minggu'),
+];
+
+final timeScheduleMedicineList = <TimeOfDay>[];
+
+enum TypeScheduleItem { daily, weekly }
+
+class TypeScheduleModel extends Equatable {
+  final String value;
+  final TypeScheduleItem typeScheduleItem;
+  const TypeScheduleModel({
+    this.value = 'daily',
+    this.typeScheduleItem = TypeScheduleItem.daily,
+  });
+
+  @override
+  List<Object> get props => [value, typeScheduleItem];
+
+  @override
+  bool get stringify => true;
+
+  TypeScheduleModel copyWith({
+    String? value,
+    TypeScheduleItem? typeScheduleItem,
+  }) {
+    return TypeScheduleModel(
+      value: value ?? this.value,
+      typeScheduleItem: typeScheduleItem ?? this.typeScheduleItem,
     );
   }
 }
