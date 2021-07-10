@@ -1,4 +1,6 @@
 import 'dart:developer';
+import 'dart:io';
+import 'dart:ui';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
@@ -9,17 +11,19 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:global_template/global_template.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import './src/provider/global/global_provider.dart';
+import './src/network/my_network.dart';
+import './src/provider/my_provider.dart';
+import './src/shimmer/my_shimmer.dart';
 import './src/utils/my_utils.dart';
 
 Future<void> main() async {
   // await initializeDateFormatting();
-  appConfig.configuration(
-    nameLogoAsset: 'logo.png',
-  );
+  appConfig.configuration(nameLogoAsset: 'logo.png');
   colorPallete.configuration(
     primaryColor: const Color(0xFFEEA4A7),
     accentColor: const Color(0xFF9F7C9D),
@@ -62,35 +66,7 @@ class MyApp extends StatelessWidget {
         textTheme: GoogleFonts.comfortaaTextTheme(Theme.of(context).textTheme),
       ),
       home: const SplashScreen(),
-      onGenerateRoute: (settings) {
-        final route = RouteAnimation();
-        switch (settings.name) {
-          case SplashScreen.routeNamed:
-            return route.fadeTransition(
-              screen: (ctx, animation, secondaryAnimation) => const SplashScreen(),
-            );
-          case LoginScreen.routeNamed:
-            return route.fadeTransition(
-                screen: (ctx, animation, secondaryAnimation) => const LoginScreen());
-          case OnboardingScreen.routeNamed:
-            return route.fadeTransition(
-                screen: (ctx, animation, secondaryAnimation) => const OnboardingScreen());
-          case RegistrationScreen.routeNamed:
-            return route.fadeTransition(
-                screen: (ctx, animation, secondaryAnimation) => const RegistrationScreen());
-          case WelcomeScreen.routeNamed:
-            return route.fadeTransition(
-                screen: (ctx, animation, secondaryAnimation) => const WelcomeScreen());
-          case FormChangePassword.routeNamed:
-            return route.slideTransition(
-                slidePosition: SlidePosition.fromLeft,
-                screen: (ctx, animation, secondaryAnimation) => const FormChangePassword());
-          case FormMedicine.routeNamed:
-            return route.fadeTransition(
-                screen: (ctx, animation, secondaryAnimation) => const FormMedicine());
-          default:
-        }
-      },
+      onGenerateRoute: myRoute.configure,
     );
   }
 }
@@ -102,37 +78,66 @@ class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SplashScreenTemplate(
-        backgroundColor: colorPallete.primaryColor,
-        onDoneTimer: (isDone) =>
-            Navigator.of(context).pushReplacementNamed(OnboardingScreen.routeNamed),
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: FractionallySizedBox(
-              widthFactor: 1,
-              child: Image.asset(
-                constant.pathLogoWhite,
-                scale: 1.5,
-              ),
+      body: Consumer(
+        builder: (context, ref, child) {
+          final _initializeSession = ref.watch(initializeSession);
+
+          return _initializeSession.when(
+            data: (_) {
+              return SplashScreenTemplate(
+                duration: 1,
+                backgroundColor: colorPallete.primaryColor,
+                onDoneTimer: (isDone) {
+                  final _sessionLogin = ref.read(sessionLogin).state;
+                  final _sessionOnboarding = ref.read(sessionOnboarding).state;
+                  log('sessionLogin $_sessionLogin\nsessionOnboarding $_sessionOnboarding');
+                  if (!_sessionOnboarding) {
+                    Navigator.of(context).pushReplacementNamed(OnboardingScreen.routeNamed);
+                    return;
+                  }
+
+                  if (_sessionLogin == null) {
+                    Navigator.of(context).pushReplacementNamed(LoginScreen.routeNamed);
+                    return;
+                  }
+
+                  Navigator.of(context).pushReplacementNamed(WelcomeScreen.routeNamed);
+                },
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: FractionallySizedBox(
+                      widthFactor: 1,
+                      child: Image.asset(
+                        constant.pathLogoWhite,
+                        scale: 1.5,
+                      ),
+                    ),
+                  ),
+                  CopyRightVersion(
+                    backgroundColor: Colors.white,
+                    colorText: colorPallete.primaryColor!,
+                  ),
+                ],
+              );
+            },
+            loading: () => const Center(child: LinearProgressIndicator()),
+            error: (error, stackTrace) => Center(
+              child: Text(error.toString()),
             ),
-          ),
-          CopyRightVersion(
-            backgroundColor: Colors.white,
-            colorText: colorPallete.primaryColor!,
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 }
 
-class OnboardingScreen extends StatelessWidget {
+class OnboardingScreen extends ConsumerWidget {
   static const routeNamed = '/onboarding-screen';
   const OnboardingScreen({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: OnboardingPage(
         backgroundOnboarding: colorPallete.primaryColor,
@@ -141,7 +146,10 @@ class OnboardingScreen extends StatelessWidget {
         backgroundColorCircleIndicator: colorPallete.success!,
         onPageChanged: (value) => '',
         onClickNext: (value) => '',
-        onClickFinish: () => Navigator.of(context).pushReplacementNamed(LoginScreen.routeNamed),
+        onClickFinish: () async {
+          await ref.read(sessionProvider.notifier).setSessionOnboarding(value: true);
+          Navigator.of(context).pushReplacementNamed(LoginScreen.routeNamed);
+        },
         items: [
           OnboardingItem(
             logo: FractionallySizedBox(
@@ -197,12 +205,27 @@ class OnboardingScreen extends StatelessWidget {
   }
 }
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends ConsumerWidget {
   static const routeNamed = '/login-screen';
-  const LoginScreen({Key? key}) : super(key: key);
+
+  LoginScreen({Key? key}) : super(key: key);
+
+  final _formKey = GlobalKey<FormState>();
+
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen<StateController<bool>>(isLoading, (loading) {
+      if (loading.state) {
+        showLoadingDialog(context);
+        return;
+      }
+
+      Navigator.of(context, rootNavigator: true).pop();
+    });
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -229,55 +252,92 @@ class LoginScreen extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(height: 20),
-                            Center(
-                              child: Text(
-                                'Selamat Datang',
-                                style: GoogleFonts.montserratAlternates(
-                                    fontWeight: FontWeight.bold, fontSize: 16.0),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(height: 20),
+                              Center(
+                                child: Text(
+                                  'Selamat Datang',
+                                  style: GoogleFonts.montserratAlternates(
+                                      fontWeight: FontWeight.bold, fontSize: 16.0),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 20),
-                            TextFormFieldCustom(
-                              disableOutlineBorder: false,
-                              prefixIcon: Icon(FeatherIcons.mail, color: colorPallete.accentColor),
-                              hintText: 'zeffry.ganteng@gmail.com',
-                              labelText: 'Email',
-                              borderColor: colorPallete.accentColor,
-                              borderFocusColor: colorPallete.accentColor,
-                              activeColor: colorPallete.accentColor,
-                            ),
-                            const SizedBox(height: 20),
-                            TextFormFieldCustom(
-                              isPassword: true,
-                              disableOutlineBorder: false,
-                              prefixIcon: Icon(FeatherIcons.lock, color: colorPallete.accentColor),
-                              hintText: '********',
-                              labelText: 'Password',
-                              borderColor: colorPallete.accentColor,
-                              borderFocusColor: colorPallete.accentColor,
-                              activeColor: colorPallete.accentColor,
-                              onObsecurePasswordIcon: (isObsecure) =>
-                                  isObsecure ? FeatherIcons.eyeOff : FeatherIcons.eye,
-                            ),
-                            const SizedBox(height: 20),
-                            ElevatedButton(
-                              onPressed: () => Navigator.of(context)
-                                  .pushReplacementNamed(WelcomeScreen.routeNamed),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.all(14.0),
+                              const SizedBox(height: 20),
+                              TextFormFieldCustom(
+                                controller: _emailController,
+                                disableOutlineBorder: false,
+                                prefixIcon:
+                                    Icon(FeatherIcons.mail, color: colorPallete.accentColor),
+                                hintText: 'zeffry.ganteng@gmail.com',
+                                labelText: 'Email',
+                                borderColor: colorPallete.accentColor,
+                                borderFocusColor: colorPallete.accentColor,
+                                activeColor: colorPallete.accentColor,
+                                validator: (value) =>
+                                    (value?.isEmpty ?? false) ? 'Email tidak boleh kosong' : null,
                               ),
-                              child: Text(
-                                'Login',
-                                style: GoogleFonts.comfortaa().copyWith(color: Colors.white),
+                              const SizedBox(height: 20),
+                              TextFormFieldCustom(
+                                controller: _passwordController,
+                                isPassword: true,
+                                disableOutlineBorder: false,
+                                prefixIcon:
+                                    Icon(FeatherIcons.lock, color: colorPallete.accentColor),
+                                hintText: '********',
+                                labelText: 'Password',
+                                borderColor: colorPallete.accentColor,
+                                borderFocusColor: colorPallete.accentColor,
+                                activeColor: colorPallete.accentColor,
+                                onObsecurePasswordIcon: (isObsecure) =>
+                                    isObsecure ? FeatherIcons.eyeOff : FeatherIcons.eye,
+                                validator: (value) => (value?.isEmpty ?? false)
+                                    ? 'Password tidak boleh kosong'
+                                    : null,
                               ),
-                            ),
-                            const SizedBox(height: 20),
-                          ],
+                              const SizedBox(height: 20),
+                              ElevatedButton(
+                                onPressed: () async {
+                                  final validate = _formKey.currentState?.validate() ?? false;
+
+                                  if (!validate) {
+                                    return;
+                                  }
+                                  try {
+                                    ref.read(isLoading).state = true;
+                                    await ref.read(userProvider.notifier).login(
+                                          email: _emailController.text,
+                                          password: _passwordController.text,
+                                        );
+                                    ref.read(isLoading).state = false;
+                                    Future.delayed(
+                                        const Duration(milliseconds: 500),
+                                        () => Navigator.of(context)
+                                            .pushReplacementNamed(WelcomeScreen.routeNamed));
+                                  } catch (e) {
+                                    GlobalFunction.showSnackBar(
+                                      context,
+                                      content: Text(e.toString()),
+                                      snackBarType: SnackBarType.error,
+                                    );
+                                    Future.delayed(const Duration(milliseconds: 100),
+                                        () => ref.read(isLoading).state = false);
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.all(14.0),
+                                ),
+                                child: Text(
+                                  'Login',
+                                  style: GoogleFonts.comfortaa().copyWith(color: Colors.white),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -345,12 +405,41 @@ class LoginScreen extends StatelessWidget {
   }
 }
 
-class RegistrationScreen extends StatelessWidget {
+class RegistrationScreen extends ConsumerStatefulWidget {
   static const routeNamed = '/registration-screen';
   const RegistrationScreen({Key? key}) : super(key: key);
 
   @override
+  _RegistrationScreenState createState() => _RegistrationScreenState();
+}
+
+class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
+  final _formKey = GlobalKey<FormState>();
+
+  late final TextEditingController _fullNameController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _passwordController;
+  late final TextEditingController _passwordConfirmController;
+
+  @override
+  void initState() {
+    super.initState();
+    _fullNameController = TextEditingController();
+    _emailController = TextEditingController();
+    _passwordController = TextEditingController();
+    _passwordConfirmController = TextEditingController();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    ref.listen<StateController<bool>>(isLoading, (loading) {
+      if (loading.state) {
+        showLoadingDialog(context);
+        return;
+      }
+
+      Navigator.of(context, rootNavigator: true).pop();
+    });
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -372,59 +461,109 @@ class RegistrationScreen extends StatelessWidget {
           child: Card(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormFieldCustom(
-                    disableOutlineBorder: false,
-                    borderColor: colorPallete.accentColor,
-                    prefixIcon: Icon(FeatherIcons.user, color: colorPallete.accentColor),
-                    labelText: 'Nama Lengkap',
-                    hintText: 'Zeffry Reynando',
-                  ),
-                  const SizedBox(height: 20),
-                  TextFormFieldCustom(
-                    disableOutlineBorder: false,
-                    borderColor: colorPallete.accentColor,
-                    prefixIcon: Icon(FeatherIcons.mail, color: colorPallete.accentColor),
-                    labelText: 'Email',
-                    hintText: 'zeffry.reynando@gmail.com',
-                  ),
-                  const SizedBox(height: 20),
-                  TextFormFieldCustom(
-                    isPassword: true,
-                    disableOutlineBorder: false,
-                    borderColor: colorPallete.accentColor,
-                    prefixIcon: Icon(FeatherIcons.lock, color: colorPallete.accentColor),
-                    onObsecurePasswordIcon: (isObsecure) =>
-                        isObsecure ? FeatherIcons.eyeOff : FeatherIcons.eye,
-                    labelText: 'Password',
-                    hintText: '********',
-                  ),
-                  const SizedBox(height: 20),
-                  TextFormFieldCustom(
-                    isPassword: true,
-                    disableOutlineBorder: false,
-                    borderColor: colorPallete.accentColor,
-                    prefixIcon: Icon(FeatherIcons.lock, color: colorPallete.accentColor),
-                    onObsecurePasswordIcon: (isObsecure) =>
-                        isObsecure ? FeatherIcons.eyeOff : FeatherIcons.eye,
-                    labelText: 'Ulangi Password',
-                    hintText: '********',
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16.0)),
-                    child: Text(
-                      'Daftar',
-                      style: GoogleFonts.montserratAlternates(
-                          fontWeight: FontWeight.bold, color: Colors.white),
+              child: Form(
+                key: _formKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormFieldCustom(
+                      controller: _fullNameController,
+                      disableOutlineBorder: false,
+                      borderColor: colorPallete.accentColor,
+                      prefixIcon: Icon(FeatherIcons.user, color: colorPallete.accentColor),
+                      labelText: 'Nama Lengkap',
+                      hintText: 'Zeffry Reynando',
+                      validator: (value) =>
+                          (value?.isEmpty ?? false) ? 'Nama lengkap tidak boleh kosong' : null,
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
+                    const SizedBox(height: 20),
+                    TextFormFieldCustom(
+                      controller: _emailController,
+                      disableOutlineBorder: false,
+                      borderColor: colorPallete.accentColor,
+                      prefixIcon: Icon(FeatherIcons.mail, color: colorPallete.accentColor),
+                      keyboardType: TextInputType.emailAddress,
+                      labelText: 'Email',
+                      hintText: 'zeffry.reynando@gmail.com',
+                      validator: (value) =>
+                          (value?.isEmpty ?? false) ? 'Email tidak boleh kosong' : null,
+                    ),
+                    const SizedBox(height: 20),
+                    TextFormFieldCustom(
+                      controller: _passwordController,
+                      isPassword: true,
+                      disableOutlineBorder: false,
+                      borderColor: colorPallete.accentColor,
+                      prefixIcon: Icon(FeatherIcons.lock, color: colorPallete.accentColor),
+                      onObsecurePasswordIcon: (isObsecure) =>
+                          isObsecure ? FeatherIcons.eyeOff : FeatherIcons.eye,
+                      labelText: 'Password',
+                      hintText: '********',
+                      validator: (value) =>
+                          (value?.isEmpty ?? false) ? 'Password tidak boleh kosong' : null,
+                    ),
+                    const SizedBox(height: 20),
+                    TextFormFieldCustom(
+                      controller: _passwordConfirmController,
+                      isPassword: true,
+                      disableOutlineBorder: false,
+                      borderColor: colorPallete.accentColor,
+                      prefixIcon: Icon(FeatherIcons.lock, color: colorPallete.accentColor),
+                      onObsecurePasswordIcon: (isObsecure) =>
+                          isObsecure ? FeatherIcons.eyeOff : FeatherIcons.eye,
+                      labelText: 'Ulangi Password',
+                      hintText: '********',
+                      validator: (value) => (value?.isEmpty ?? false)
+                          ? 'Password Konfirmasi tidak boleh kosong'
+                          : null,
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: () async {
+                        final validation = _formKey.currentState?.validate() ?? false;
+
+                        if (!validation) {
+                          return;
+                        }
+                        try {
+                          ref.read(isLoading).state = true;
+                          final registration = await ref.read(userProvider.notifier).registration(
+                                fullName: _fullNameController.text,
+                                email: _emailController.text,
+                                password: _passwordController.text,
+                                passwordConfirm: _passwordConfirmController.text,
+                              );
+                          final message = registration['message'] as String;
+
+                          GlobalFunction.showSnackBar(
+                            context,
+                            content: Text(message),
+                            snackBarType: SnackBarType.success,
+                          );
+                          ref.read(isLoading).state = false;
+                          Future.delayed(
+                              const Duration(milliseconds: 500), () => Navigator.of(context).pop());
+                        } catch (e) {
+                          ref.read(isLoading).state = false;
+                          GlobalFunction.showSnackBar(
+                            context,
+                            content: Text(e.toString()),
+                            snackBarType: SnackBarType.error,
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16.0)),
+                      child: Text(
+                        'Daftar',
+                        style: GoogleFonts.montserratAlternates(
+                            fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
               ),
             ),
           ),
@@ -435,7 +574,7 @@ class RegistrationScreen extends StatelessWidget {
 }
 
 /// For keep position on PageView [https://stackoverflow.com/questions/61414778/tabbarview-or-indexedstack-for-bottomnavigationbar-flutter]
-class WelcomeScreen extends StatefulWidget {
+class WelcomeScreen extends ConsumerStatefulWidget {
   static const routeNamed = '/welcome-screen';
   const WelcomeScreen({Key? key}) : super(key: key);
 
@@ -443,12 +582,14 @@ class WelcomeScreen extends StatefulWidget {
   _WelcomeScreenState createState() => _WelcomeScreenState();
 }
 
-class _WelcomeScreenState extends State<WelcomeScreen> {
+class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
   late final PageController _pageController;
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: context.read(currentIndexBNB).state);
+    ref.read(initializeSession.future).then((_) => log('Initialize Session'));
+    ref.read(getMedicineCategory.future).then((value) => log('MedicineCategory $value'));
+    _pageController = PageController(initialPage: ref.read(currentIndexBNB).state);
   }
 
   @override
@@ -456,14 +597,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     return Scaffold(
       body: PageView(
         controller: _pageController,
-        onPageChanged: (value) => context.read(currentIndexBNB).state = value,
-        // ignore: prefer_const_literals_to_create_immutables
-        children: [
-          const HomeScreen(),
-          const CalendarScreen(),
-          const MyScheduleMedicineScreen(),
-          const StatisticScreen(),
-          const AccountScreen(),
+        onPageChanged: (value) => ref.read(currentIndexBNB).state = value,
+        children: const [
+          HomeScreen(),
+          CalendarScreen(),
+          MyScheduleMedicineScreen(),
+          StatisticScreen(),
+          AccountScreen(),
         ],
       ),
       bottomNavigationBar: MyBottomNavigationBar(pageController: _pageController),
@@ -471,10 +611,17 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 }
 
-class AccountScreen extends StatelessWidget {
+class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({
     Key? key,
   }) : super(key: key);
+
+  @override
+  _AccountScreenState createState() => _AccountScreenState();
+}
+
+class _AccountScreenState extends ConsumerState<AccountScreen> {
+  final ImagePicker _picker = ImagePicker();
 
   @override
   Widget build(BuildContext context) {
@@ -505,54 +652,162 @@ class AccountScreen extends StatelessWidget {
                           ],
                         ),
                         child: Center(
-                          child: CircleAvatar(
-                            backgroundColor: colorPallete.accentColor,
-                            radius: 60.0,
-                            child: const Icon(FeatherIcons.user, size: 40.0),
+                          child: InkWell(
+                            onTap: () async {
+                              await showModalBottomSheet(
+                                context: context,
+                                builder: (context) => ActionModalBottomSheet(
+                                  typeAction: TypeAction.none,
+                                  align: WrapAlignment.center,
+                                  children: [
+                                    ActionCircleButton(
+                                      backgroundColor: colorPallete.info,
+                                      foregroundColor: Colors.white,
+                                      icon: FeatherIcons.camera,
+                                      radius: 40.0,
+                                      onTap: () async {
+                                        try {
+                                          final _pickedFile = await _picker.getImage(
+                                            source: ImageSource.camera,
+                                            maxHeight: 200,
+                                            maxWidth: 200,
+                                            imageQuality: 80,
+                                          );
+
+                                          if (_pickedFile != null) {
+                                            final user = ref.read(sessionLogin).state;
+                                            final image = File(_pickedFile.path);
+                                            await ref.read(userProvider.notifier).updateImage(
+                                                  user?.id ?? 0,
+                                                  image: image,
+                                                );
+                                            setState(() {});
+                                          }
+                                        } catch (e) {
+                                          GlobalFunction.showSnackBar(context,
+                                              content: Text(e.toString()),
+                                              snackBarType: SnackBarType.error);
+                                        }
+                                      },
+                                    ),
+                                    ActionCircleButton(
+                                      backgroundColor: colorPallete.success,
+                                      foregroundColor: Colors.white,
+                                      icon: FeatherIcons.image,
+                                      radius: 40.0,
+                                      onTap: () async {
+                                        try {
+                                          final _pickedFile = await _picker.getImage(
+                                            source: ImageSource.gallery,
+                                            maxHeight: 200,
+                                            maxWidth: 200,
+                                            imageQuality: 80,
+                                          );
+                                          if (_pickedFile != null) {
+                                            final user = ref.read(sessionLogin).state;
+                                            final image = File(_pickedFile.path);
+                                            await ref.read(userProvider.notifier).updateImage(
+                                                  user?.id ?? 0,
+                                                  image: image,
+                                                );
+                                            setState(() {});
+                                          }
+                                        } catch (e) {
+                                          GlobalFunction.showSnackBar(context,
+                                              content: Text(e.toString()),
+                                              snackBarType: SnackBarType.error);
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                            child: Builder(
+                              builder: (context) {
+                                final user = ref.watch(sessionLogin).state;
+                                Widget image;
+
+                                if (user?.image?.isEmpty ?? true) {
+                                  image = CircleAvatar(
+                                    backgroundColor: colorPallete.accentColor,
+                                    radius: 60.0,
+                                    child: const Icon(
+                                      FeatherIcons.user,
+                                      size: 40.0,
+                                    ),
+                                  );
+                                } else {
+                                  image = ClipOval(
+                                    child: Image.network(
+                                      '${constant.baseImage}/users/${user?.image}?v=${DateTime.now().millisecondsSinceEpoch}',
+                                      key: ValueKey(
+                                          '${constant.baseImage}/users/${user?.image}?v=${DateTime.now().millisecondsSinceEpoch}'),
+                                      height: 120,
+                                      width: 120,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  );
+                                }
+
+                                return image;
+                              },
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
-                      Center(
-                        child: Text(
-                          'Zeffry Reynando',
-                          style: GoogleFonts.montserratAlternates(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 24.0,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Center(
-                        child: Text(
-                          'zeffry.reynando@gmail.com',
-                          style: GoogleFonts.comfortaa(
-                            fontSize: 12.0,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Center(
-                        child: Text.rich(
-                          TextSpan(
-                            style: GoogleFonts.comfortaa(
-                                color: Colors.white,
-                                decoration: TextDecoration.underline,
-                                fontSize: 10.0,
-                                fontWeight: FontWeight.w300),
+                      Builder(
+                        builder: (context) {
+                          final user = ref.watch(sessionLogin).state;
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              const TextSpan(text: 'Terakhir login pada '),
-                              TextSpan(
-                                text: '1 Juli 2020 @20.00',
-                                style: GoogleFonts.comfortaa(fontWeight: FontWeight.bold),
-                              )
+                              const SizedBox(height: 20),
+                              Center(
+                                child: Text(
+                                  user?.fullname ?? '',
+                                  style: GoogleFonts.montserratAlternates(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 24.0,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              Center(
+                                child: Text(
+                                  user?.email ?? '',
+                                  style: GoogleFonts.comfortaa(
+                                    fontSize: 12.0,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              Center(
+                                child: Text.rich(
+                                  TextSpan(
+                                    style: GoogleFonts.comfortaa(
+                                        color: Colors.white,
+                                        decoration: TextDecoration.underline,
+                                        fontSize: 10.0,
+                                        fontWeight: FontWeight.w300),
+                                    children: [
+                                      const TextSpan(text: 'Terakhir login pada '),
+                                      TextSpan(
+                                        text:
+                                            '${GlobalFunction.formatYMD(user?.loginAt ?? DateTime(1970, 10, 10), type: 3)} @${GlobalFunction.formatHM(user?.loginAt ?? DateTime(1970, 10, 10))}',
+                                        style: GoogleFonts.comfortaa(fontWeight: FontWeight.bold),
+                                      )
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
                             ],
-                          ),
-                        ),
+                          );
+                        },
                       ),
-                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
@@ -637,7 +892,21 @@ class AccountScreen extends StatelessWidget {
                                             color: colorPallete.primaryColor,
                                             decoration: TextDecoration.underline,
                                           ),
-                                          recognizer: TapGestureRecognizer()..onTap = () => '',
+                                          recognizer: TapGestureRecognizer()
+                                            ..onTap = () async {
+                                              try {
+                                                final _url = constant.freepikUrl;
+                                                await canLaunch(_url)
+                                                    ? await launch(_url)
+                                                    : throw 'Could not launch $_url';
+                                              } catch (e) {
+                                                GlobalFunction.showSnackBar(
+                                                  context,
+                                                  content: Text(e.toString()),
+                                                  snackBarType: SnackBarType.error,
+                                                );
+                                              }
+                                            },
                                         ),
                                         const TextSpan(text: ' from '),
                                         TextSpan(
@@ -647,7 +916,21 @@ class AccountScreen extends StatelessWidget {
                                               color: colorPallete.primaryColor,
                                               decoration: TextDecoration.underline,
                                             ),
-                                            recognizer: TapGestureRecognizer()..onTap = () => ''),
+                                            recognizer: TapGestureRecognizer()
+                                              ..onTap = () async {
+                                                try {
+                                                  final _url = constant.flaticonUrl;
+                                                  await canLaunch(_url)
+                                                      ? await launch(_url)
+                                                      : throw 'Could not launch $_url';
+                                                } catch (e) {
+                                                  GlobalFunction.showSnackBar(
+                                                    context,
+                                                    content: Text(e.toString()),
+                                                    snackBarType: SnackBarType.error,
+                                                  );
+                                                }
+                                              }),
                                       ],
                                     ),
                                   ),
@@ -666,12 +949,6 @@ class AccountScreen extends StatelessWidget {
                         icon: FeatherIcons.flag,
                         title: 'Copyright',
                         subtitle: 'Copyright yang ada pada aplikasi ini',
-                      ),
-                      AccountMenuItem(
-                        onTap: () {},
-                        icon: FeatherIcons.info,
-                        title: 'Tentang Aplikasi',
-                        subtitle: 'Segala sesuatu yang ingin kamu tahu dari aplikasi ini',
                       ),
                       AccountMenuItem(
                         onTap: () async {
@@ -693,40 +970,53 @@ class AccountScreen extends StatelessWidget {
                                     crossAxisSpacing: 32.0,
                                     mainAxisSpacing: 32.0,
                                   ),
-                                  itemCount: 10,
-                                  itemBuilder: (context, index) => InkWell(
-                                    onTap: () {},
-                                    child: Ink(
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(10.0),
-                                        color: colorPallete.primaryColor,
-                                      ),
-                                      padding: const EdgeInsets.all(12.0),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Expanded(
-                                            child: Center(
-                                              child: Icon(
-                                                FeatherIcons.linkedin,
-                                                color: Colors.white,
-                                                size: 40.0,
+                                  itemCount: listSocialMedia.length,
+                                  itemBuilder: (context, index) {
+                                    final socialMedia = listSocialMedia[index];
+                                    return InkWell(
+                                      onTap: () async {
+                                        try {
+                                          final _url = socialMedia.url;
+                                          await canLaunch(_url)
+                                              ? await launch(_url)
+                                              : throw 'Could not launch $_url';
+                                        } catch (e) {
+                                          GlobalFunction.showSnackBar(
+                                            context,
+                                            content: Text(e.toString()),
+                                            snackBarType: SnackBarType.error,
+                                          );
+                                        }
+                                      },
+                                      child: Ink(
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(10.0),
+                                          color: colorPallete.primaryColor,
+                                        ),
+                                        padding: const EdgeInsets.all(12.0),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            Expanded(
+                                              child: Padding(
+                                                padding: const EdgeInsets.all(24.0),
+                                                child: socialMedia.icon,
                                               ),
                                             ),
-                                          ),
-                                          Center(
-                                            child: Text(
-                                              'LinkedIn',
-                                              style: GoogleFonts.montserratAlternates(
-                                                fontSize: 14.0,
-                                                color: Colors.white,
+                                            Center(
+                                              child: Text(
+                                                socialMedia.name,
+                                                style: GoogleFonts.montserratAlternates(
+                                                  fontSize: 14.0,
+                                                  color: Colors.white,
+                                                ),
                                               ),
-                                            ),
-                                          )
-                                        ],
+                                            )
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ),
+                                    );
+                                  },
                                 ),
                               ),
                             ),
@@ -736,6 +1026,15 @@ class AccountScreen extends StatelessWidget {
                         title: 'Tentang Developer',
                         subtitle:
                             'Punya pertanyaan yang mengganjal hatimu atau hanya ingin lebih dekat denganku ?',
+                      ),
+                      AccountMenuItem(
+                        onTap: () async {
+                          await ref.read(sessionProvider.notifier).removeSessionLogin();
+                          Navigator.of(context).pushReplacementNamed(LoginScreen.routeNamed);
+                        },
+                        icon: FeatherIcons.logOut,
+                        title: 'Keluar',
+                        subtitle: 'Jangan lupa untuk kembali lagi ya...',
                       ),
                     ],
                   ),
@@ -822,7 +1121,7 @@ class StatisticScreen extends StatelessWidget {
   }
 }
 
-class MyScheduleMedicineScreen extends StatefulWidget {
+class MyScheduleMedicineScreen extends ConsumerStatefulWidget {
   const MyScheduleMedicineScreen({
     Key? key,
   }) : super(key: key);
@@ -831,209 +1130,288 @@ class MyScheduleMedicineScreen extends StatefulWidget {
   _MyScheduleMedicineScreenState createState() => _MyScheduleMedicineScreenState();
 }
 
-class _MyScheduleMedicineScreenState extends State<MyScheduleMedicineScreen>
-    with SingleTickerProviderStateMixin {
-  final tabs = <String>['Harian', 'Mingguan'];
-  final tabs2 = <String, String>{'harian': 'Harian', 'mingguna': 'Mingguan'};
+class _MyScheduleMedicineScreenState extends ConsumerState<MyScheduleMedicineScreen>
+    with TickerProviderStateMixin {
+  late final ScrollController _scrollController;
 
-  late final TabController _tabController;
+  int _page = 1;
+  final int _dataPerPage = 10;
+  bool _hasMore = true;
+
   @override
   void initState() {
+    _scrollController = ScrollController()
+      ..addListener(() {
+        if (_scrollController.offset == _scrollController.position.maxScrollExtent && _hasMore) {
+          _page += 1;
+          log('currentPage $_page');
+          ref.refresh(medicineLoadMore(_page).future).then((value) {
+            if (value.length < _dataPerPage) {
+              _hasMore = false;
+            }
+          });
+        }
+      });
     super.initState();
-    _tabController = TabController(vsync: this, length: 2);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return NestedScrollView(
-      headerSliverBuilder: (context, innerBoxIsScrolled) => [
-        SliverOverlapAbsorber(
-          handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-          sliver: SliverAppBar(
-            title: Text(
-              'Jadwal Obatku',
-              style: GoogleFonts.montserratAlternates(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            centerTitle: true,
-            floating: true,
-            snap: true,
-            forceElevated: innerBoxIsScrolled,
-            actions: [
-              IconButton(
-                  onPressed: () {
-                    Navigator.of(context).pushNamed(FormMedicine.routeNamed);
-                  },
-                  icon: const Icon(FeatherIcons.plus, color: Colors.white)),
-            ],
-            bottom: TabBar(
-              controller: _tabController,
-              indicator: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: colorPallete.accentColor!, width: 4),
-                ),
-              ),
-              tabs: tabs2.entries
-                  .map((e) => Tab(
-                        child: Text(
-                          e.value,
-                          style: GoogleFonts.comfortaa(color: Colors.white),
+    final _futureMedicine = ref.watch(getMedicine);
+    final _medicineTabbarDistinct = ref.watch(medicineTabbarDistinct).state;
+    return _futureMedicine.when(
+      data: (value) {
+        return DefaultTabController(
+          length: _medicineTabbarDistinct.length,
+          child: RefreshIndicator(
+            onRefresh: () async {
+              _page = 1;
+              _hasMore = true;
+              ref.refresh(getMedicine);
+            },
+            notificationPredicate: (notification) {
+              if (notification is OverscrollNotification) {
+                return notification.depth == 2;
+              }
+              return notification.depth == 0;
+            },
+            child: NestedScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              controller: _scrollController,
+              headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                SliverOverlapAbsorber(
+                  handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+                  sliver: SliverAppBar(
+                    title: Text(
+                      'Jadwal Obatku',
+                      style: GoogleFonts.montserratAlternates(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    centerTitle: true,
+                    floating: true,
+                    snap: true,
+                    forceElevated: innerBoxIsScrolled,
+                    actions: [
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pushNamed(FormMedicine.routeNamed),
+                        icon: const Icon(FeatherIcons.plus, color: Colors.white),
+                      ),
+                    ],
+                    bottom: TabBar(
+                        indicator: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: colorPallete.accentColor!, width: 4),
+                          ),
                         ),
-                      ))
-                  .toList(),
+                        tabs: _medicineTabbarDistinct
+                            .map((e) => Tab(
+                                  child: Text(
+                                    e == TypeSchedule.daily ? 'Harian' : 'Mingguan',
+                                    style: GoogleFonts.comfortaa(color: Colors.white),
+                                  ),
+                                ))
+                            .toList()),
+                  ),
+                ),
+              ],
+              body: Builder(
+                builder: (context) {
+                  if (_medicineTabbarDistinct.isEmpty) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        child: Text(
+                          'Kelihatannya kamu belum mempunyai jadwal ?,\n ayo tambah jadwal pertamamu',
+                          textAlign: TextAlign.center,
+                          style: fontsMontserratAlternate.copyWith(fontSize: 20.0),
+                        ),
+                      ),
+                    );
+                  }
+                  return TabBarView(
+                    children: _medicineTabbarDistinct.map((e) {
+                      return MyScheduleMedicineTabMenu(typeSchedule: e);
+                    }).toList(),
+                  );
+                },
+              ),
             ),
           ),
-        )
-      ],
-      body: TabBarView(
-        controller: _tabController,
-        children: tabs2.entries
-            .map((e) => Builder(
-                  builder: (context) {
-                    if (e.key == 'harian') {
-                      return ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: 100,
-                        itemBuilder: (context, index) {
-                          return Stack(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: FractionallySizedBox(
-                                  widthFactor: 1,
-                                  child: Ink(
-                                    decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(20.0)),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(24.0),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                                        children: [
-                                          Center(
-                                            child: Image.asset(
-                                              constant.pathMedsImage,
-                                              width: 60.0,
-                                              height: 60.0,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 20.0),
-                                          Text(
-                                            'Pil Penambah Kekuatan',
-                                            style: GoogleFonts.comfortaa(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16.0,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 20.0),
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                flex: 3,
-                                                child: Text(
-                                                  'Hari Minum',
-                                                  style: GoogleFonts.comfortaa(fontSize: 10.0),
-                                                ),
-                                              ),
-                                              Expanded(
-                                                flex: 9,
-                                                child: Wrap(
-                                                  spacing: 10.0,
-                                                  runSpacing: 10.0,
-                                                  children: [
-                                                    Card(
-                                                      shape: RoundedRectangleBorder(
-                                                          borderRadius:
-                                                              BorderRadius.circular(60.0)),
-                                                      color: ColorsUtils().getRandomColor(),
-                                                      child: const Padding(
-                                                        padding: EdgeInsets.all(6.0),
-                                                        child: FittedBox(
-                                                          child: Text(
-                                                            '10.00',
-                                                            style: TextStyle(
-                                                              fontSize: 8.0,
-                                                              color: Colors.white,
-                                                              fontWeight: FontWeight.bold,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 20.0),
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: ElevatedButton(
-                                                  onPressed: () {},
-                                                  style: ElevatedButton.styleFrom(
-                                                    padding: const EdgeInsets.all(12.0),
-                                                    primary: colorPallete.info,
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.circular(20.0),
-                                                    ),
-                                                  ),
-                                                  child: const Text('Ubah'),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 20.0),
-                                              Expanded(
-                                                child: ElevatedButton(
-                                                  onPressed: () {},
-                                                  style: ElevatedButton.styleFrom(
-                                                    padding: const EdgeInsets.all(12.0),
-                                                    primary: Colors.white,
-                                                    shape: RoundedRectangleBorder(
-                                                        borderRadius: BorderRadius.circular(20.0),
-                                                        side:
-                                                            BorderSide(color: colorPallete.error!)),
-                                                  ),
-                                                  child: Text(
-                                                    'Hapus',
-                                                    style: GoogleFonts.comfortaa(
-                                                        color: colorPallete.error),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 20.0),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                top: 20,
-                                right: 20,
-                                child: IconButton(
-                                  onPressed: () {},
-                                  icon: const Icon(FeatherIcons.chevronDown),
-                                ),
-                              )
-                            ],
-                          );
-                        },
-                      );
-                    }
-                    return Text(e.value);
-                  },
-                ))
-            .toList(),
+        );
+      },
+      loading: () => const ShimmerScheduleMedicine(),
+      error: (error, stackTrace) => Center(
+        child: Text(error.toString()),
       ),
     );
   }
 }
 
-class CalendarScreen extends StatefulWidget {
+class MyScheduleMedicineTabMenu extends ConsumerStatefulWidget {
+  const MyScheduleMedicineTabMenu({
+    Key? key,
+    required this.typeSchedule,
+  }) : super(key: key);
+
+  final TypeSchedule typeSchedule;
+
+  @override
+  _MyScheduleMedicineTabMenuState createState() => _MyScheduleMedicineTabMenuState();
+}
+
+class _MyScheduleMedicineTabMenuState extends ConsumerState<MyScheduleMedicineTabMenu>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+
+    return Consumer(
+      builder: (context, ref, child) {
+        final medicines = ref.watch(medicineBySchedule(widget.typeSchedule)).state;
+        return ListView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
+          itemCount: medicines.length,
+          itemBuilder: (context, index) {
+            final medicine = medicines[index];
+
+            return Card(
+              margin: const EdgeInsets.all(12.0),
+              child: ExpansionTile(
+                title: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 32.0),
+                        child: Center(
+                          child: Image.asset(
+                            constant.pathMedsImage,
+                            width: 60.0,
+                            height: 60.0,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20.0),
+                      Text(
+                        medicine.name ?? '',
+                        style: GoogleFonts.comfortaa(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16.0,
+                        ),
+                      ),
+                      const SizedBox(height: 20.0),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              'Hari Minum',
+                              style: GoogleFonts.comfortaa(fontSize: 10.0),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 9,
+                            child: Wrap(
+                              spacing: 10.0,
+                              runSpacing: 10.0,
+                              children: [
+                                Card(
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(60.0)),
+                                  color: ColorsUtils().getRandomColor(),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(6.0),
+                                    child: FittedBox(
+                                      child: Text(
+                                        '10.00',
+                                        style: TextStyle(
+                                          fontSize: 8.0,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.of(context).pushNamed(
+                                FormMedicine.routeNamed,
+                                arguments: medicine,
+                              );
+                              ref
+                                  .read(MedicineDetailProvider.provider.notifier)
+                                  .setMedicine(medicine);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.all(12.0),
+                              primary: colorPallete.info,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20.0),
+                              ),
+                            ),
+                            child: const Text('Ubah'),
+                          ),
+                        ),
+                        const SizedBox(width: 20.0),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {},
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.all(12.0),
+                              primary: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20.0),
+                                  side: BorderSide(color: colorPallete.error!)),
+                            ),
+                            child: Text(
+                              'Hapus',
+                              style: GoogleFonts.comfortaa(color: colorPallete.error),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20.0),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  bool get wantKeepAlive => true;
+}
+
+class CalendarScreen extends ConsumerStatefulWidget {
   const CalendarScreen({
     Key? key,
   }) : super(key: key);
@@ -1042,10 +1420,12 @@ class CalendarScreen extends StatefulWidget {
   _CalendarScreenState createState() => _CalendarScreenState();
 }
 
-class _CalendarScreenState extends State<CalendarScreen> with AutomaticKeepAliveClientMixin {
+class _CalendarScreenState extends ConsumerState<CalendarScreen>
+    with AutomaticKeepAliveClientMixin {
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -1056,17 +1436,16 @@ class _CalendarScreenState extends State<CalendarScreen> with AutomaticKeepAlive
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.0)),
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
-                child: Consumer(
-                  builder: (context, watch, child) {
-                    final _currentFormatCalendar = watch(currentFormatCalendar).state;
-                    final _focusedDayCalendar = watch(currentFocuesDayCalendar).state;
+                child: Builder(
+                  builder: (context) {
+                    final _currentFormatCalendar = ref.watch(currentFormatCalendar).state;
+                    final _focusedDayCalendar = ref.watch(currentFocuesDayCalendar).state;
                     return TableCalendar(
                       focusedDay: _focusedDayCalendar,
                       firstDay: DateTime(1999, 4, 4),
                       lastDay: DateTime.now(),
                       calendarFormat: _currentFormatCalendar,
-                      onFormatChanged: (format) =>
-                          context.read(currentFormatCalendar).state = format,
+                      onFormatChanged: (format) => ref.read(currentFormatCalendar).state = format,
                       locale: constant.localeIndonesiaString,
                       availableCalendarFormats: constant.kAvaliableCalendarFormat,
                       headerStyle: HeaderStyle(
@@ -1085,7 +1464,7 @@ class _CalendarScreenState extends State<CalendarScreen> with AutomaticKeepAlive
                           builder: (context, child) => child ?? const SizedBox(),
                         );
                         if (result != null) {
-                          context.read(currentFocuesDayCalendar).state = result;
+                          ref.read(currentFocuesDayCalendar).state = result;
                         }
                       },
                     );
@@ -1107,7 +1486,6 @@ class _CalendarScreenState extends State<CalendarScreen> with AutomaticKeepAlive
   }
 
   @override
-  // TODO: implement wantKeepAlive
   bool get wantKeepAlive => true;
 }
 
@@ -1325,7 +1703,7 @@ class MedicineScheduleItem extends StatelessWidget {
   }
 }
 
-class MyBottomNavigationBar extends StatefulWidget {
+class MyBottomNavigationBar extends ConsumerStatefulWidget {
   final PageController pageController;
   const MyBottomNavigationBar({
     Key? key,
@@ -1336,12 +1714,11 @@ class MyBottomNavigationBar extends StatefulWidget {
   _MyBottomNavigationBarState createState() => _MyBottomNavigationBarState();
 }
 
-class _MyBottomNavigationBarState extends State<MyBottomNavigationBar> {
+class _MyBottomNavigationBarState extends ConsumerState<MyBottomNavigationBar> {
   @override
   Widget build(BuildContext context) {
-    return Consumer(
-      builder: (context, watch, child) {
-        final _currentIndexBNB = watch(currentIndexBNB).state;
+    return Builder(
+      builder: (context) {
         return Container(
           decoration: BoxDecoration(
             boxShadow: const [
@@ -1354,7 +1731,7 @@ class _MyBottomNavigationBarState extends State<MyBottomNavigationBar> {
             child: BottomNavigationBar(
               showSelectedLabels: false,
               showUnselectedLabels: false,
-              currentIndex: _currentIndexBNB,
+              currentIndex: ref.watch(currentIndexBNB).state,
               selectedItemColor: colorPallete.primaryColor,
               unselectedItemColor: Colors.black,
               type: BottomNavigationBarType.fixed,
@@ -1364,7 +1741,7 @@ class _MyBottomNavigationBarState extends State<MyBottomNavigationBar> {
                   duration: const Duration(milliseconds: 500),
                   curve: Curves.easeIn,
                 );
-                context.read(currentIndexBNB).state = value;
+                ref.read(currentIndexBNB).state = value;
               },
               items: [
                 const BottomNavigationBarItem(icon: Icon(FeatherIcons.home), label: 'Beranda'),
@@ -1394,7 +1771,7 @@ class _MyBottomNavigationBarState extends State<MyBottomNavigationBar> {
   }
 }
 
-class FormChangePassword extends StatefulWidget {
+class FormChangePassword extends ConsumerStatefulWidget {
   static const routeNamed = '/change-password';
   const FormChangePassword({Key? key}) : super(key: key);
 
@@ -1402,9 +1779,22 @@ class FormChangePassword extends StatefulWidget {
   _FormChangePasswordState createState() => _FormChangePasswordState();
 }
 
-class _FormChangePasswordState extends State<FormChangePassword> {
+class _FormChangePasswordState extends ConsumerState<FormChangePassword> {
+  final _formKey = GlobalKey<FormState>();
+
+  final passwordOldController = TextEditingController();
+  final passwordNewController = TextEditingController();
+  final passwordConfirmController = TextEditingController();
+
   @override
   Widget build(BuildContext context) {
+    ref.listen<StateController<bool>>(isLoading, (loading) {
+      if (loading.state) {
+        showLoadingDialog(context);
+        return;
+      }
+      Navigator.of(context, rootNavigator: true).pop();
+    });
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -1427,53 +1817,102 @@ class _FormChangePasswordState extends State<FormChangePassword> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.0)),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 20),
-                  TextFormFieldCustom(
-                    hintText: 'Password Lama',
-                    labelText: 'Password Lama',
-                    disableOutlineBorder: false,
-                    isPassword: true,
-                    borderColor: colorPallete.accentColor,
-                    onObsecurePasswordIcon: (isObsecure) =>
-                        isObsecure ? FeatherIcons.eyeOff : FeatherIcons.eye,
-                    prefixIcon: const Icon(FeatherIcons.lock),
-                  ),
-                  const SizedBox(height: 20),
-                  TextFormFieldCustom(
-                    hintText: 'Password Baru',
-                    labelText: 'Password Baru',
-                    disableOutlineBorder: false,
-                    isPassword: true,
-                    borderColor: colorPallete.accentColor,
-                    onObsecurePasswordIcon: (isObsecure) =>
-                        isObsecure ? FeatherIcons.eyeOff : FeatherIcons.eye,
-                    prefixIcon: const Icon(FeatherIcons.lock),
-                  ),
-                  const SizedBox(height: 20),
-                  TextFormFieldCustom(
-                    hintText: 'Konfirmasi Password',
-                    labelText: 'Konfirmasi Password',
-                    disableOutlineBorder: false,
-                    isPassword: true,
-                    borderColor: colorPallete.accentColor,
-                    onObsecurePasswordIcon: (isObsecure) =>
-                        isObsecure ? FeatherIcons.eyeOff : FeatherIcons.eye,
-                    prefixIcon: const Icon(FeatherIcons.lock),
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(12.0)),
-                    child: Text(
-                      'Ubah',
-                      style: GoogleFonts.montserratAlternates(fontWeight: FontWeight.bold),
+              child: Form(
+                key: _formKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 20),
+                    TextFormFieldCustom(
+                      controller: passwordOldController,
+                      hintText: 'Password Lama',
+                      labelText: 'Password Lama',
+                      disableOutlineBorder: false,
+                      isPassword: true,
+                      borderColor: colorPallete.accentColor,
+                      onObsecurePasswordIcon: (isObsecure) =>
+                          isObsecure ? FeatherIcons.eyeOff : FeatherIcons.eye,
+                      prefixIcon: const Icon(FeatherIcons.lock),
+                      validator: (value) =>
+                          GlobalFunction.validateIsEmpty(value, 'Password Lama tidak boleh kosong'),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
+                    const SizedBox(height: 20),
+                    TextFormFieldCustom(
+                      controller: passwordNewController,
+                      hintText: 'Password Baru',
+                      labelText: 'Password Baru',
+                      disableOutlineBorder: false,
+                      isPassword: true,
+                      borderColor: colorPallete.accentColor,
+                      onObsecurePasswordIcon: (isObsecure) =>
+                          isObsecure ? FeatherIcons.eyeOff : FeatherIcons.eye,
+                      prefixIcon: const Icon(FeatherIcons.lock),
+                      validator: (value) =>
+                          GlobalFunction.validateIsEmpty(value, 'Password Baru tidak boleh kosong'),
+                    ),
+                    const SizedBox(height: 20),
+                    TextFormFieldCustom(
+                      controller: passwordConfirmController,
+                      hintText: 'Konfirmasi Password',
+                      labelText: 'Konfirmasi Password',
+                      disableOutlineBorder: false,
+                      isPassword: true,
+                      borderColor: colorPallete.accentColor,
+                      onObsecurePasswordIcon: (isObsecure) =>
+                          isObsecure ? FeatherIcons.eyeOff : FeatherIcons.eye,
+                      prefixIcon: const Icon(FeatherIcons.lock),
+                      validator: (value) => GlobalFunction.validateIsEmpty(
+                          value, 'Password Konfirmasi tidak boleh kosong'),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: () async {
+                        final validate = _formKey.currentState?.validate() ?? false;
+                        if (!validate) {
+                          return;
+                        }
+
+                        try {
+                          ref.read(isLoading).state = true;
+                          final idUser = ref.read(sessionLogin).state?.id;
+                          log('iduser $idUser');
+                          final result = await ref.read(userProvider.notifier).updatePassword(
+                                idUser ?? 0,
+                                passwordOld: passwordOldController.text,
+                                passwordNew: passwordNewController.text,
+                                passwordConfirm: passwordConfirmController.text,
+                              );
+                          GlobalFunction.showSnackBar(
+                            context,
+                            content: Text(result['message'] as String),
+                            snackBarType: SnackBarType.success,
+                          );
+
+                          /// Reset TextField
+                          passwordOldController.clear();
+                          passwordNewController.clear();
+                          passwordConfirmController.clear();
+                          ref.read(isLoading).state = false;
+                        } catch (e) {
+                          ref.read(isLoading).state = false;
+
+                          GlobalFunction.showSnackBar(
+                            context,
+                            content: Text(e.toString()),
+                            snackBarType: SnackBarType.error,
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(12.0)),
+                      child: Text(
+                        'Ubah',
+                        style: GoogleFonts.montserratAlternates(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1483,243 +1922,357 @@ class _FormChangePasswordState extends State<FormChangePassword> {
   }
 }
 
-class FormMedicine extends StatefulWidget {
+class FormMedicine extends ConsumerStatefulWidget {
   static const routeNamed = '/form-medicine';
-  const FormMedicine({Key? key}) : super(key: key);
+  final MedicineModel? medicine;
 
+  const FormMedicine({required this.medicine});
   @override
   _FormMedicineState createState() => _FormMedicineState();
 }
 
-class _FormMedicineState extends State<FormMedicine> {
+class _FormMedicineState extends ConsumerState<FormMedicine> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController nameController;
+  late final TextEditingController descriptionController;
+  @override
+  void initState() {
+    if (widget.medicine == null) {
+      nameController = TextEditingController();
+      descriptionController = TextEditingController();
+    } else {
+      final medicine = ref.read(medicineById(widget.medicine!.id!)).state;
+      nameController = TextEditingController(text: medicine?.name);
+      descriptionController = TextEditingController(text: medicine?.description);
+
+      /// Jika ingin meng-initialize stateProvider
+      /// Gunakan [addPostFrameCallback]
+      /// karena mengubah state harus setelah widget dibuat
+      /// Detail [https://stackoverflow.com/questions/66835759/how-to-initialize-stateprovider-from-constructor-in-riverpod]
+      WidgetsBinding.instance?.addPostFrameCallback((timeStamp) {
+        ref.read(selectedMedicineCategory).state = medicine!.medicineCategory;
+        ref.read(selectedTypeSchedule).state = medicine.typeSchedule;
+      });
+    }
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    descriptionController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-          icon: const Icon(
-            FeatherIcons.arrowLeft,
-            color: Colors.white,
-          ),
-        ),
-        centerTitle: true,
-        title: Text(
-          'Form Obat',
-          style: GoogleFonts.montserratAlternates(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        actions: [
-          IconButton(
-            onPressed: () {},
+    ref.listen<StateController<bool>>(isLoading, (loading) {
+      if (loading.state) {
+        showLoadingDialog(context);
+        return;
+      }
+      Navigator.of(context, rootNavigator: true).pop();
+    });
+    final medicineDetail = ref.watch(MedicineDetailProvider.provider);
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            onPressed: () => Navigator.of(context).pop(),
             icon: const Icon(
-              FeatherIcons.save,
+              FeatherIcons.arrowLeft,
               color: Colors.white,
             ),
-          )
-        ],
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Dismissible(
-                key: UniqueKey(),
-                child: Container(
-                  padding: const EdgeInsets.all(12.0),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10.0),
-                    color: colorPallete.info,
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black54, blurRadius: 1),
-                    ],
+          ),
+          centerTitle: true,
+          title: Text(
+            'Form Obat',
+            style: GoogleFonts.montserratAlternates(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          actions: [
+            IconButton(
+              onPressed: () async {
+                final validate = _formKey.currentState?.validate() ?? false;
+                if (!validate) {
+                  return;
+                }
+                try {
+                  ref.read(isLoading).state = true;
+                  final idMedicineCategory = ref.read(selectedMedicineCategory).state?.id;
+                  final typeSchedule = ref.read(selectedTypeSchedule).state;
+
+                  if (idMedicineCategory == null) {
+                    throw Exception('Kategori obat tidak boleh kosong');
+                  }
+                  if (typeSchedule == null) {
+                    throw Exception('Tipe Jadwal minum obat tidak boleh kosong');
+                  }
+
+                  final idUser = ref.read(sessionLogin).state?.id ?? 0;
+                  final result = await ref.read(medicineProvider.notifier).addMedicine(
+                        idMedicineCategory: idMedicineCategory,
+                        idUser: idUser,
+                        name: nameController.text,
+                        description: descriptionController.text,
+                        typeSchedule: typeSchedule,
+                      );
+                  ref
+                      .read(MedicineDetailProvider.provider.notifier)
+                      .setMedicine(result['medicine'] as MedicineModel);
+                  GlobalFunction.showSnackBar(
+                    context,
+                    content: Text(result['message'] as String),
+                    snackBarType: SnackBarType.success,
+                  );
+                  // _resetForm();
+                  ref.read(isLoading).state = false;
+                } catch (e) {
+                  ref.read(isLoading).state = false;
+                  GlobalFunction.showSnackBar(
+                    context,
+                    content: Text(e.toString()),
+                    snackBarType: SnackBarType.error,
+                  );
+                }
+              },
+              icon: const Icon(
+                FeatherIcons.save,
+                color: Colors.white,
+              ),
+            )
+          ],
+        ),
+        body: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AnimatedSwitcher(
+                  duration: kThemeAnimationDuration,
+                  child: medicineDetail != null
+                      ? const SizedBox()
+                      : Container(
+                          padding: const EdgeInsets.all(12.0),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10.0),
+                            color: colorPallete.info,
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black54, blurRadius: 1),
+                            ],
+                          ),
+                          child: const Text(
+                            'Untuk menambah jam minum obat, silahkan simpan data terlebih dahulu',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10.0,
+                            ),
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 20.0),
+                Text(
+                  'Informasi Obat',
+                  style: GoogleFonts.montserratAlternates(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16.0,
                   ),
-                  child: const Text(
-                    'Untuk menambah jam minum obat, silahkan simpan data terlebih dahulu',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10.0,
+                ),
+                const SizedBox(height: 20.0),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          TextFormFieldCustom(
+                            controller: nameController,
+                            disableOutlineBorder: false,
+                            hintText: 'Obat Sakit Perut, Obat Penurun Panas',
+                            labelText: 'Nama Obat',
+                            validator: (value) => GlobalFunction.validateIsEmpty(value),
+                          ),
+                          const SizedBox(height: 20.0),
+                          Consumer(
+                            builder: (context, ref, child) {
+                              final categories = ref.watch(medicineCategoryProvider);
+                              final _selectedCategory = ref.watch(selectedMedicineCategory).state;
+                              return DropddownCustom<MedicineCategoryModel>(
+                                hintText: 'Pilih Kategori Obat',
+                                selectedItem: _selectedCategory,
+                                items: categories,
+                                onChanged: (value) =>
+                                    ref.read(selectedMedicineCategory).state = value,
+                                builder: (value) => Text(value?.name ?? ''),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 20.0),
+                          TextFormFieldCustom(
+                            controller: descriptionController,
+                            disableOutlineBorder: false,
+                            hintText: 'Keterangan obat',
+                            labelText: 'Keterangan',
+                            minLines: 3,
+                            maxLines: 5,
+                            keyboardType: TextInputType.multiline,
+                            textInputAction: TextInputAction.newline,
+                            validator: (value) => GlobalFunction.validateIsEmpty(value),
+                          ),
+                          const SizedBox(height: 20.0),
+                          Consumer(
+                            builder: (context, ref, child) {
+                              return DropddownCustom<TypeSchedule>(
+                                hintText: 'Pilih Tipe Jadwal',
+                                selectedItem: ref.watch(selectedTypeSchedule).state,
+                                items: const [
+                                  TypeSchedule.daily,
+                                  TypeSchedule.weekly,
+                                ],
+                                onChanged: (value) => ref.read(selectedTypeSchedule).state = value,
+                                builder: (value) {
+                                  return Text(value == TypeSchedule.daily ? "Harian" : "Mingguan");
+                                },
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 20.0),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 20.0),
-              Text(
-                'Informasi Obat',
-                style: GoogleFonts.montserratAlternates(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16.0,
-                ),
-              ),
-              const SizedBox(height: 20.0),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                const SizedBox(height: 20.0),
+                Visibility(
+                  visible: false,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const TextFormFieldCustom(
-                        disableOutlineBorder: false,
-                        hintText: 'Obat Sakit Perut, Obat Penurun Panas',
-                        labelText: 'Nama Obat',
-                      ),
-                      const SizedBox(height: 20.0),
-                      DropddownCustom<String>(
-                        hintText: 'Pilih Kategori Obat',
-                        items: const ['Pill', 'Kapsul', 'Sir up'],
-                        onChanged: (value) => log('value $value'),
-                        valueItem: (value) => value,
-                        builder: (value) => Text(value.toString()),
-                      ),
-                      const SizedBox(height: 20.0),
-                      const TextFormFieldCustom(
-                        disableOutlineBorder: false,
-                        hintText: 'Keterangan obat',
-                        labelText: 'Keterangan',
-                        minLines: 3,
-                        maxLines: 5,
-                        keyboardType: TextInputType.multiline,
-                        textInputAction: TextInputAction.newline,
-                      ),
-                      const SizedBox(height: 20.0),
-                      DropddownCustom<TypeScheduleModel>(
-                        hintText: 'Pilih Tipe Jadwal',
-                        items: const [
-                          TypeScheduleModel(),
-                          TypeScheduleModel(
-                            value: 'weekly',
-                            typeScheduleItem: TypeScheduleItem.weekly,
-                          ),
-                        ],
-                        onChanged: (value) => context.read(currentTypeSchedule).state = value,
-                        valueItem: (value) => value,
-                        builder: (value) => Text(value?.value ?? ''),
-                      ),
-                      const SizedBox(height: 20.0),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20.0),
-              Text(
-                'Penentuan Jadwal',
-                style: GoogleFonts.montserratAlternates(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16.0,
-                ),
-              ),
-              const SizedBox(height: 20.0),
-
-              // const SizedBox(height: 20.0),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 20.0),
-                      Ink(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: colorPallete.accentColor!),
-                          borderRadius: BorderRadius.circular(10.0),
-                        ),
-                        child: ListView.builder(
-                          itemCount: weekList.length,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemBuilder: (context, index) {
-                            final week = weekList[index];
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                unselectedWidgetColor: colorPallete.accentColor,
-                              ),
-                              child: CheckboxListTile(
-                                controlAffinity: ListTileControlAffinity.leading,
-                                value: true,
-                                title: Text(week.title),
-                                onChanged: (value) => '',
-                              ),
-                            );
-                          },
+                      Text(
+                        'Penentuan Jadwal',
+                        style: GoogleFonts.montserratAlternates(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16.0,
                         ),
                       ),
-                      if (timeScheduleMedicineList.isEmpty) ...[
-                        const SizedBox(height: 20.0),
-                        const Center(child: Text('Daftar minum obat belum ada nih')),
-                      ] else ...[
-                        const SizedBox(height: 20.0),
-                        ListView.separated(
-                          separatorBuilder: (context, index) =>
-                              Divider(color: colorPallete.accentColor?.withOpacity(.5)),
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: timeScheduleMedicineList.length,
-                          shrinkWrap: true,
-                          itemBuilder: (context, index) {
-                            final schedule = timeScheduleMedicineList[index];
-                            return ListTile(
-                              leading: Ink(
-                                height: 30,
-                                width: 30,
-                                padding: const EdgeInsets.all(8.0),
+                      const SizedBox(height: 20.0),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 20.0),
+                              Ink(
                                 decoration: BoxDecoration(
-                                  color: colorPallete.primaryColor,
+                                  border: Border.all(color: colorPallete.accentColor!),
                                   borderRadius: BorderRadius.circular(10.0),
                                 ),
-                                child: Text(
-                                  '${index + 1}',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(color: Colors.white),
+                                child: ListView.builder(
+                                  itemCount: weekList.length,
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemBuilder: (context, index) {
+                                    final week = weekList[index];
+                                    return Theme(
+                                      data: Theme.of(context).copyWith(
+                                        unselectedWidgetColor: colorPallete.accentColor,
+                                      ),
+                                      child: CheckboxListTile(
+                                        controlAffinity: ListTileControlAffinity.leading,
+                                        value: true,
+                                        title: Text(week.title),
+                                        onChanged: (value) => '',
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
-                              title: Text(
-                                '${schedule.hour}:${schedule.minute}',
-                                style: GoogleFonts.montserratAlternates(),
+                              if (timeScheduleMedicineList.isEmpty) ...[
+                                const SizedBox(height: 20.0),
+                                const Center(child: Text('Daftar minum obat belum ada nih')),
+                              ] else ...[
+                                const SizedBox(height: 20.0),
+                                ListView.separated(
+                                  separatorBuilder: (context, index) =>
+                                      Divider(color: colorPallete.accentColor?.withOpacity(.5)),
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: timeScheduleMedicineList.length,
+                                  shrinkWrap: true,
+                                  itemBuilder: (context, index) {
+                                    final schedule = timeScheduleMedicineList[index];
+                                    return ListTile(
+                                      leading: Ink(
+                                        height: 30,
+                                        width: 30,
+                                        padding: const EdgeInsets.all(8.0),
+                                        decoration: BoxDecoration(
+                                          color: colorPallete.primaryColor,
+                                          borderRadius: BorderRadius.circular(10.0),
+                                        ),
+                                        child: Text(
+                                          '${index + 1}',
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(color: Colors.white),
+                                        ),
+                                      ),
+                                      title: Text(
+                                        '${schedule.hour}:${schedule.minute}',
+                                        style: GoogleFonts.montserratAlternates(),
+                                      ),
+                                      trailing: Wrap(
+                                        children: [
+                                          IconButton(
+                                              onPressed: () {},
+                                              icon: Icon(FeatherIcons.trash,
+                                                  color: colorPallete.error)),
+                                          IconButton(
+                                              onPressed: () {},
+                                              icon: Icon(
+                                                FeatherIcons.edit,
+                                                color: colorPallete.info,
+                                              ))
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                              const SizedBox(height: 20.0),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: () async {
+                                    final result = await showTimePicker(
+                                      context: context,
+                                      initialTime: TimeOfDay.now(),
+                                    );
+                                    if (result != null) {
+                                      log('result timepicker $result');
+                                      setState(() {
+                                        timeScheduleMedicineList.add(result);
+                                      });
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    primary: colorPallete.success,
+                                    padding: const EdgeInsets.all(12.0),
+                                  ),
+                                  child: const Text(
+                                    'Tambah jam minum obat',
+                                  ),
+                                ),
                               ),
-                              trailing: Wrap(
-                                children: [
-                                  IconButton(
-                                      onPressed: () {},
-                                      icon: Icon(FeatherIcons.trash, color: colorPallete.error)),
-                                  IconButton(
-                                      onPressed: () {},
-                                      icon: Icon(
-                                        FeatherIcons.edit,
-                                        color: colorPallete.info,
-                                      ))
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                      const SizedBox(height: 20.0),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            final result = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay.now(),
-                            );
-                            if (result != null) {
-                              log('result timepicker $result');
-                              setState(() {
-                                timeScheduleMedicineList.add(result);
-                              });
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            primary: colorPallete.success,
-                            padding: const EdgeInsets.all(12.0),
-                          ),
-                          child: const Text(
-                            'Tambah jam minum obat',
+                              const SizedBox(height: 20.0),
+                            ],
                           ),
                         ),
                       ),
@@ -1727,13 +2280,19 @@ class _FormMedicineState extends State<FormMedicine> {
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 20.0),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  void _resetForm() {
+    nameController.clear();
+    descriptionController.clear();
+    ref.read(selectedMedicineCategory).state = null;
+    ref.read(selectedTypeSchedule).state = null;
   }
 }
 
@@ -1778,30 +2337,3 @@ const weekList = [
 ];
 
 final timeScheduleMedicineList = <TimeOfDay>[];
-
-enum TypeScheduleItem { daily, weekly }
-
-class TypeScheduleModel extends Equatable {
-  final String value;
-  final TypeScheduleItem typeScheduleItem;
-  const TypeScheduleModel({
-    this.value = 'daily',
-    this.typeScheduleItem = TypeScheduleItem.daily,
-  });
-
-  @override
-  List<Object> get props => [value, typeScheduleItem];
-
-  @override
-  bool get stringify => true;
-
-  TypeScheduleModel copyWith({
-    String? value,
-    TypeScheduleItem? typeScheduleItem,
-  }) {
-    return TypeScheduleModel(
-      value: value ?? this.value,
-      typeScheduleItem: typeScheduleItem ?? this.typeScheduleItem,
-    );
-  }
-}

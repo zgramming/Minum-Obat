@@ -4,6 +4,16 @@ import 'package:table_calendar/table_calendar.dart';
 
 // ignore: avoid_classes_with_only_static_members
 class Constant {
+  ///* Key SharedPreferences
+  String get keySessionLogin => '_keySessionLogin';
+  String get keySessionOnboarding => '_keyOnboardingScreen';
+
+  ///* Rest API
+  String get _baseUrl => 'http://192.168.42.69/API/api.minum_obat';
+  String get baseAPI => _baseUrl;
+  String get fullPathAPI => '$_baseUrl/api/v1';
+  String get baseImage => '$_baseUrl/assets/images';
+
   ///* Application Detail
   String get applicationName => 'Minum Obat';
   String get dsnSentry =>
@@ -32,6 +42,10 @@ class Constant {
       };
 
   Locale get localeIndonesia => const Locale('id', 'ID');
+
+  /// Url Copyright Website
+  String get freepikUrl => 'https://www.freepik.com/';
+  String get flaticonUrl => 'https://www.flaticon.com/';
 }
 
 final constant = Constant();
