@@ -14,6 +14,12 @@ enum TypeSchedule {
   weekly
 }
 
+// ignore: constant_identifier_names
+const TypeScheduleValues = {
+  TypeSchedule.daily: 'daily',
+  TypeSchedule.weekly: 'weekly',
+};
+
 @immutable
 @JsonSerializable(fieldRename: FieldRename.snake)
 class MedicineModel extends Equatable {
@@ -57,8 +63,8 @@ class MedicineModel extends Equatable {
   final int? updateBy;
   final DateTime? createDate;
   final DateTime? updateDate;
-  final MedicineCategoryModel medicineCategory;
-  final UserModel user;
+  final MedicineCategoryModel? medicineCategory;
+  final UserModel? user;
 
   factory MedicineModel.fromJson(Map<String, dynamic> json) => _$MedicineModelFromJson(json);
   Map<String, dynamic> toJson() => _$MedicineModelToJson(this);

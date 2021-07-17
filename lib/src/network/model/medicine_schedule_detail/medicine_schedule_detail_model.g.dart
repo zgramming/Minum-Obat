@@ -1,49 +1,39 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'medicine_model.dart';
+part of 'medicine_schedule_detail_model.dart';
 
 // **************************************************************************
 // JsonSerializableGenerator
 // **************************************************************************
 
-MedicineModel _$MedicineModelFromJson(Map<String, dynamic> json) {
-  return MedicineModel(
+MedicineScheduleDetailModel _$MedicineScheduleDetailModelFromJson(
+    Map<String, dynamic> json) {
+  return MedicineScheduleDetailModel(
     id: GlobalFunction.fromJsonStringToInteger(json['id']),
-    name: json['name'] as String?,
-    typeSchedule: _$enumDecode(_$TypeScheduleEnumMap, json['type_schedule']),
-    frequency: GlobalFunction.fromJsonStringToInteger(json['frequency']),
-    description: json['description'] as String?,
+    specificDay: _$enumDecode(_$SpecificDayEnumMap, json['specific_day']),
     createBy: GlobalFunction.fromJsonStringToInteger(json['create_by']),
-    updateBy: GlobalFunction.fromJsonStringToInteger(json['update_by']),
     createDate: json['create_date'] == null
         ? null
         : DateTime.parse(json['create_date'] as String),
+    updateBy: GlobalFunction.fromJsonStringToInteger(json['update_by']),
     updateDate: json['update_date'] == null
         ? null
         : DateTime.parse(json['update_date'] as String),
-    medicineCategory: json['medicine_category'] == null
-        ? null
-        : MedicineCategoryModel.fromJson(
-            json['medicine_category'] as Map<String, dynamic>),
-    user: json['user'] == null
-        ? null
-        : UserModel.fromJson(json['user'] as Map<String, dynamic>),
+    medicineSchedule: MedicineScheduleModel.fromJson(
+        json['medicine_schedule'] as Map<String, dynamic>),
   );
 }
 
-Map<String, dynamic> _$MedicineModelToJson(MedicineModel instance) =>
+Map<String, dynamic> _$MedicineScheduleDetailModelToJson(
+        MedicineScheduleDetailModel instance) =>
     <String, dynamic>{
       'id': GlobalFunction.toJsonStringFromInteger(instance.id),
-      'name': instance.name,
-      'type_schedule': _$TypeScheduleEnumMap[instance.typeSchedule],
-      'frequency': GlobalFunction.toJsonStringFromInteger(instance.frequency),
-      'description': instance.description,
+      'specific_day': _$SpecificDayEnumMap[instance.specificDay],
       'create_by': GlobalFunction.toJsonStringFromInteger(instance.createBy),
-      'update_by': GlobalFunction.toJsonStringFromInteger(instance.updateBy),
       'create_date': instance.createDate?.toIso8601String(),
+      'update_by': GlobalFunction.toJsonStringFromInteger(instance.updateBy),
       'update_date': instance.updateDate?.toIso8601String(),
-      'medicine_category': instance.medicineCategory,
-      'user': instance.user,
+      'medicine_schedule': instance.medicineSchedule,
     };
 
 K _$enumDecode<K, V>(
@@ -72,7 +62,13 @@ K _$enumDecode<K, V>(
   ).key;
 }
 
-const _$TypeScheduleEnumMap = {
-  TypeSchedule.daily: 'daily',
-  TypeSchedule.weekly: 'weekly',
+const _$SpecificDayEnumMap = {
+  SpecificDay.daily: 'daily',
+  SpecificDay.senin: 'senin',
+  SpecificDay.selasa: 'selasa',
+  SpecificDay.rabu: 'rabu',
+  SpecificDay.kamis: 'kamis',
+  SpecificDay.jumat: 'jumat',
+  SpecificDay.sabtu: 'sabtu',
+  SpecificDay.minggu: 'minggu',
 };

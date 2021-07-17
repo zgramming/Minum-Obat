@@ -12,6 +12,6 @@ final currentFormatCalendar =
 
 final currentFocuesDayCalendar = StateProvider.autoDispose<DateTime>((ref) => DateTime.now());
 
-final selectedTypeSchedule = StateProvider.autoDispose<TypeSchedule?>((ref) => null);
+// final selectedTypeSchedule = StateProvider.autoDispose<TypeSchedule?>((ref) => null);
 
-final selectedMedicineCategory = StateProvider.autoDispose<MedicineCategoryModel?>((ref) => null);
+// final selectedMedicineCategory = StateProvider.autoDispose<MedicineCategoryModel?>((ref) => null);
