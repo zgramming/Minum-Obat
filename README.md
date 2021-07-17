@@ -6,7 +6,7 @@ Aplikasi pengingat minum obat kesayangan kita semua
 
 - [x] Design Database 
 - [x] Make design in Figma
-- [] It's Coding Time + Es Teh Manis
+- [Progress] It's Coding Time + Es Teh Manis
 - [] Upload to Playstore & Appstore
 
 
