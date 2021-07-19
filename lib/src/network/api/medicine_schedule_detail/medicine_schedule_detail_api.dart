@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:dio/dio.dart';
 import '../../../utils/my_utils.dart';
 
@@ -11,13 +13,13 @@ class MedicineScheduleDetailApi {
     final response = await _dio.get(
       '${constant.baseAPI}/medicineScheduleDetail',
       queryParameters: {
-        if (id == null) 'id_medicine_schedule': '$idMedicineSchedule' else 'id': '$id',
+        if (id == null) 'id_medicine': '$idMedicineSchedule' else 'id': '$id',
       },
       options: Options(
         validateStatus: (status) => (status ?? 0) < 500,
       ),
     );
-    // log('json medicineCategory ${response.data}');
+    log('json medicine scheduledetial ${response.data}');
     final Map<String, dynamic> json = response.data as Map<String, dynamic>;
     if (json['status'] != "success") {
       throw Exception(json['message'] as String);

@@ -19,8 +19,9 @@ MedicineScheduleDetailModel _$MedicineScheduleDetailModelFromJson(
     updateDate: json['update_date'] == null
         ? null
         : DateTime.parse(json['update_date'] as String),
-    medicineSchedule: MedicineScheduleModel.fromJson(
-        json['medicine_schedule'] as Map<String, dynamic>),
+    medicine: json['medicine'] == null
+        ? null
+        : MedicineModel.fromJson(json['medicine'] as Map<String, dynamic>),
   );
 }
 
@@ -33,7 +34,7 @@ Map<String, dynamic> _$MedicineScheduleDetailModelToJson(
       'create_date': instance.createDate?.toIso8601String(),
       'update_by': GlobalFunction.toJsonStringFromInteger(instance.updateBy),
       'update_date': instance.updateDate?.toIso8601String(),
-      'medicine_schedule': instance.medicineSchedule,
+      'medicine': instance.medicine,
     };
 
 K _$enumDecode<K, V>(

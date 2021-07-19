@@ -55,9 +55,9 @@ class _MyScheduleMedicineScreenState extends ConsumerState<MyScheduleMedicineScr
   @override
   Widget build(BuildContext context) {
     final _futureMedicine = ref.watch(getMedicine);
-    final _medicineTabbarDistinct = ref.watch(medicineTabbarDistinct).state;
     return _futureMedicine.when(
       data: (value) {
+        final _medicineTabbarDistinct = ref.watch(medicineTabbarDistinct).state;
         return DefaultTabController(
           length: _medicineTabbarDistinct.length,
           child: RefreshIndicator(

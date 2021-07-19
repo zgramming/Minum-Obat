@@ -1,9 +1,9 @@
-import 'dart:developer';
-
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
-import 'package:minum_obat/src/provider/my_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../network/my_network.dart';
+import '../../screen/form_medicine/widgets/form_medicine_detail.dart';
+import '../my_provider.dart';
 
 class MedicineDetailProvider extends StateNotifier<MedicineModel?> {
   MedicineDetailProvider() : super(null);
@@ -23,6 +23,8 @@ class MedicineProvider extends StateNotifier<List<MedicineModel>> {
   final _medicineApi = MedicineApi();
 
   final _medicineScheduleProvider = MedicineScheduleProvider();
+
+  final _medicineScheduleDetailProvider = MedicineScheduleDetailProvider();
 
   static final provider =
       StateNotifierProvider<MedicineProvider, List<MedicineModel>>((ref) => MedicineProvider());
@@ -56,17 +58,22 @@ class MedicineProvider extends StateNotifier<List<MedicineModel>> {
     required String name,
     required String description,
     required TypeSchedule typeSchedule,
+    required List<ScheduleDay> listScheduleDay,
   }) async {
+    final days = listScheduleDay.map((e) => e.value).toList();
     final result = await _medicineApi.addMedicine({
       'id_medicine_category': '$idMedicineCategory',
       'id_user': '$idUser',
       'name': name,
       'description': description,
       'type_schedule': TypeScheduleValues[typeSchedule],
+      'specific_day[]': days,
     });
 
     final medicine = MedicineModel.fromJson(result['data'] as Map<String, dynamic>);
 
+    /// After insert Medicine, get schedule detail
+    await _medicineScheduleDetailProvider.get(idMedicine: medicine.id);
     state = [...state, medicine];
 
     return {
@@ -133,6 +140,7 @@ final getMedicine = FutureProvider<List<MedicineModel>>((ref) async {
       await ref.read(MedicineProvider.provider.notifier).get(idUser, clearCache: true);
   for (final medicine in medicines) {
     await ref.read(getMedicineSchedule(medicine.id ?? 0).future);
+    await ref.read(getMedicineScheduleDetail(medicine.id ?? 0).future);
   }
   return medicines;
 });
@@ -141,9 +149,10 @@ final medicineLoadMore = FutureProvider.family<List<MedicineModel>, int>((ref, p
   final idUser = ref.read(sessionLogin).state?.id ?? 0;
   final medicines = await ref.read(MedicineProvider.provider.notifier).get(idUser, page: page);
 
-  // for (final medicine in medicines) {
-  //   await ref.read(getMedicineSchedule(medicine.id ?? 0).future);
-  // }
+  for (final medicine in medicines) {
+    await ref.read(getMedicineSchedule(medicine.id ?? 0).future);
+    await ref.read(getMedicineScheduleDetail(medicine.id ?? 0).future);
+  }
   return medicines;
 });
 

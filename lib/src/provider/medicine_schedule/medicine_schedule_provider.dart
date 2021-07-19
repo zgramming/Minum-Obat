@@ -88,7 +88,7 @@ class MedicineScheduleProvider extends StateNotifier<List<MedicineScheduleModel>
 
   void deleteByIdMedicine({required int idMedicine}) {
     log('MedicineSchedule before delete ${state.length}');
-    // state = [...state.where((element) => element.medicine.id != idMedicine).toList()];
+    state = [...state.where((element) => element.medicine?.id != idMedicine).toList()];
     log('MedicineSchedule after delete ${state.length}');
   }
 }

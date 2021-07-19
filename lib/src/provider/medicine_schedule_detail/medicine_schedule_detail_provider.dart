@@ -1,4 +1,8 @@
+import 'dart:developer';
+
+import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../network/my_network.dart';
 
 class MedicineScheduleDetailProvider extends StateNotifier<List<MedicineScheduleDetailModel>> {
@@ -10,16 +14,19 @@ class MedicineScheduleDetailProvider extends StateNotifier<List<MedicineSchedule
 
   Future<Map<String, dynamic>> get({
     int? id,
-    int? idMedicineSchedule,
+    int? idMedicine,
   }) async {
     final result = await _medicineScheduleDetailApi.getMedicineScheduleDetail(
       id: id,
-      idMedicineSchedule: idMedicineSchedule,
+      idMedicineSchedule: idMedicine,
     );
+
     final list = result['data'] as List<dynamic>;
     final listScheduleDetail = List<MedicineScheduleDetailModel>.from(
         list.map((e) => MedicineScheduleDetailModel.fromJson(e as Map<String, dynamic>)).toList());
-    state = [...listScheduleDetail];
+    log('before ${state.length}');
+    state = [...state, ...listScheduleDetail];
+    log('after ${state.length}');
     return {
       'message': result['message'] as String,
       'data': listScheduleDetail,
@@ -27,11 +34,11 @@ class MedicineScheduleDetailProvider extends StateNotifier<List<MedicineSchedule
   }
 
   Future<Map<String, dynamic>> post(
-    int idMedicineSchedule, {
+    int idMedicine, {
     SpecificDay specificDay = SpecificDay.daily,
   }) async {
     final result = await _medicineScheduleDetailApi.addMedicineScheduleDetail({
-      'id_medicine_schedule': '$idMedicineSchedule',
+      'id_medicine': '$idMedicine',
       'specific_day': specificDay,
     });
 
@@ -45,13 +52,17 @@ class MedicineScheduleDetailProvider extends StateNotifier<List<MedicineSchedule
   }
 }
 
-final getMedicineScheduleDetail =
-    FutureProvider.autoDispose.family<List<MedicineScheduleDetailModel>, int?>(
-  (ref, idMedicineSchedule) async {
+final getMedicineScheduleDetail = FutureProvider.family<List<MedicineScheduleDetailModel>, int?>(
+  (ref, idMedicine) async {
     final _medicineScheduleDetailProvider =
         ref.read(MedicineScheduleDetailProvider.provider.notifier);
-    final result =
-        await _medicineScheduleDetailProvider.get(idMedicineSchedule: idMedicineSchedule ?? 0);
+    final result = await _medicineScheduleDetailProvider.get(idMedicine: idMedicine ?? 0);
     return result['data'] as List<MedicineScheduleDetailModel>;
   },
 );
+
+final medicineScheduleDetailByIdMedicine =
+    StateProvider.family<List<MedicineScheduleDetailModel>, int>((ref, idMedicine) {
+  final _medicinesScheduleDetail = ref.watch(MedicineScheduleDetailProvider.provider);
+  return _medicinesScheduleDetail.where((element) => element.medicine?.id == idMedicine).toList();
+});

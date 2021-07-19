@@ -32,11 +32,13 @@ class MedicineApi {
   }
 
   Future<Map<String, dynamic>> addMedicine(Map<String, dynamic> data) async {
-    final formData = FormData.fromMap(data);
     final response = await _dio.post(
       '${constant.baseAPI}/medicine',
-      data: formData,
-      options: Options(validateStatus: (status) => (status ?? 0) < 500),
+      data: data,
+      options: Options(
+        validateStatus: (status) => (status ?? 0) < 500,
+        contentType: Headers.formUrlEncodedContentType,
+      ),
     );
 
     final Map<String, dynamic> json = response.data as Map<String, dynamic>;

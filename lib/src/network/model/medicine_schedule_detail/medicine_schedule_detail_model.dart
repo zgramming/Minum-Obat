@@ -48,7 +48,7 @@ class MedicineScheduleDetailModel extends Equatable {
     this.createDate,
     this.updateBy,
     this.updateDate,
-    this.medicineSchedule = const MedicineScheduleModel(),
+    this.medicine,
   });
 
   @JsonKey(
@@ -69,7 +69,7 @@ class MedicineScheduleDetailModel extends Equatable {
   )
   final int? updateBy;
   final DateTime? updateDate;
-  final MedicineScheduleModel medicineSchedule;
+  final MedicineModel? medicine;
 
   factory MedicineScheduleDetailModel.fromJson(Map<String, dynamic> json) =>
       _$MedicineScheduleDetailModelFromJson(json);
@@ -84,7 +84,7 @@ class MedicineScheduleDetailModel extends Equatable {
       createDate,
       updateBy,
       updateDate,
-      medicineSchedule,
+      medicine,
     ];
   }
 
@@ -98,7 +98,7 @@ class MedicineScheduleDetailModel extends Equatable {
     DateTime? createDate,
     int? updateBy,
     DateTime? updateDate,
-    MedicineScheduleModel? medicineSchedule,
+    MedicineModel? medicine,
   }) {
     return MedicineScheduleDetailModel(
       id: id ?? this.id,
@@ -107,7 +107,7 @@ class MedicineScheduleDetailModel extends Equatable {
       createDate: createDate ?? this.createDate,
       updateBy: updateBy ?? this.updateBy,
       updateDate: updateDate ?? this.updateDate,
-      medicineSchedule: medicineSchedule ?? this.medicineSchedule,
+      medicine: medicine ?? this.medicine,
     );
   }
 }

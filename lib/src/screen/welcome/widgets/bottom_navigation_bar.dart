@@ -44,6 +44,7 @@ class _MyBottomNavigationBarState extends ConsumerState<MyBottomNavigationBar> {
                   duration: const Duration(milliseconds: 500),
                   curve: Curves.easeIn,
                 );
+
                 ref.read(currentIndexBNB).state = value;
               },
               items: [
