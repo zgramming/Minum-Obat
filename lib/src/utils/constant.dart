@@ -9,7 +9,7 @@ class Constant {
   String get keySessionOnboarding => '_keyOnboardingScreen';
 
   ///* Rest API
-  String get _baseUrl => 'http://192.168.42.46/API/api.minum_obat';
+  String get _baseUrl => 'http://192.168.42.216/API/api.minum_obat';
   String get baseAPI => _baseUrl;
   String get fullPathAPI => '$_baseUrl/api/v1';
   String get _baseImage => '$_baseUrl/assets/images';
